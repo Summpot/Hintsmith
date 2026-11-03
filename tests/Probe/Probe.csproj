@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="../../src/Hintsmith/build/Hintsmith.props" />
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <AvaloniaVersion Condition="'$(AvaloniaVersion)' == ''">12.0.0</AvaloniaVersion>
+    <HintsmithTaskAssembly>$(MSBuildThisFileDirectory)../../src/Hintsmith.Tasks/bin/$(Configuration)/net10.0/Hintsmith.Tasks.dll</HintsmithTaskAssembly>
+    <NoWarn>$(NoWarn);NU1902;NU1903</NoWarn>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(CurrentAvaloniaRoot)' == ''">
+    <PackageReference Include="Avalonia.Skia" Version="$(AvaloniaVersion)" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(CurrentAvaloniaRoot)' != ''">
+    <Reference Include="$(CurrentAvaloniaRoot)/Avalonia.Base.dll" />
+    <Reference Include="$(CurrentAvaloniaRoot)/Avalonia.Skia.dll" />
+    <Reference Include="$(CurrentAvaloniaRoot)/Avalonia.MicroCom.dll" />
+    <PackageReference Include="SkiaSharp" Version="3.119.4" />
+    <PackageReference Include="MicroCom.Runtime" Version="0.11.7" />
+  </ItemGroup>
+  <Import Project="../../src/Hintsmith/build/Hintsmith.targets" />
+  <ItemGroup>
+    <ProjectReference Include="../../src/Hintsmith/Hintsmith.csproj" GlobalPropertiesToRemove="PublishTrimmed;PublishAot;PublishReadyToRun;SelfContained;RuntimeIdentifier" />
+    <TrimmerRootAssembly Include="Avalonia.Skia" />
+    <TrimmerRootAssembly Include="Avalonia.Base" />
+  </ItemGroup>
+</Project>

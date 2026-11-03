@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net472;net10.0</TargetFrameworks>
+    <IsPackable>false</IsPackable>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="AsmResolver.DotNet" Version="6.0.0" />
+    <PackageReference Include="System.Reflection.Metadata" Version="10.0.1" />
+    <PackageReference Include="Microsoft.Build.Utilities.Core" Version="18.7.1" ExcludeAssets="runtime" />
+  </ItemGroup>
+</Project>

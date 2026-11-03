@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Hintsmith.Tasks/Hintsmith.Tasks.csproj" />
+    <Project Path="src/Hintsmith/Hintsmith.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Hintsmith.Tests/Hintsmith.Tests.csproj" />
+  </Folder>
+</Solution>

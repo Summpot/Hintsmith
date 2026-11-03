@@ -1,0 +1,90 @@
+<Project>
+  <PropertyGroup>
+    <HintsmithTaskAssembly Condition="'$(HintsmithTaskAssembly)' == '' And '$(MSBuildRuntimeType)' == 'Core'">$(MSBuildThisFileDirectory)../tasks/net10.0/Hintsmith.Tasks.dll</HintsmithTaskAssembly>
+    <HintsmithTaskAssembly Condition="'$(HintsmithTaskAssembly)' == ''">$(MSBuildThisFileDirectory)../tasks/net472/Hintsmith.Tasks.dll</HintsmithTaskAssembly>
+  </PropertyGroup>
+  <!-- The consuming project's PackageReference supplies the runtime assembly.
+       No restore-time injection or transitive build imports are needed. -->
+  <UsingTask TaskName="Hintsmith.Tasks.WeaveTask" AssemblyFile="$(HintsmithTaskAssembly)" />
+
+  <Target Name="HintsmithValidateHost" Condition="'$(HintsmithEnabled)' == 'true' And '$(DesignTimeBuild)' != 'true'">
+    <Error Condition="'$(MSBuildRuntimeType)' == 'Core' And $([MSBuild]::VersionLessThan('$(MSBuildVersion)', '18.0'))"
+           Text="Hintsmith's build task requires .NET SDK 10 or newer (the application may target earlier .NET versions)." />
+    <Error Condition="'$(TargetFrameworkIdentifier)' == '.NETFramework'"
+           Text="Hintsmith targets modern .NET applications. Rewritten Avalonia assemblies retain their public key identity but are not re-signed for .NET Framework strong-name verification." />
+    <PropertyGroup>
+      <_HintsmithIntermediate>$(IntermediateOutputPath)hintsmith/</_HintsmithIntermediate>
+    </PropertyGroup>
+  </Target>
+
+  <Target Name="HintsmithWeaveBuild" AfterTargets="ResolveReferences" BeforeTargets="CopyFilesToOutputDirectory"
+          DependsOnTargets="HintsmithValidateHost"
+          Condition="'$(HintsmithEnabled)' == 'true' And '$(DesignTimeBuild)' != 'true' And '$(IsCrossTargetingBuild)' != 'true'">
+    <ItemGroup>
+      <_HintsmithRuntime Include="@(ReferenceCopyLocalPaths)" Condition="'%(Filename)%(Extension)' == 'Hintsmith.dll'" />
+    </ItemGroup>
+    <WeaveTask Symbols="$(HintsmithSymbols)" PdbPath="$(HintsmithPdbPath)" InputFiles="@(ReferenceCopyLocalPaths)" RuntimeAssembly="@(_HintsmithRuntime)" IntermediateDirectory="$(_HintsmithIntermediate)">
+      <Output TaskParameter="OutputFiles" ItemName="_HintsmithBuildFiles" />
+      <Output TaskParameter="WrittenFiles" ItemName="FileWrites" />
+    </WeaveTask>
+    <ItemGroup>
+      <ReferenceCopyLocalPaths Remove="@(ReferenceCopyLocalPaths)" />
+      <ReferenceCopyLocalPaths Include="@(_HintsmithBuildFiles)" />
+    </ItemGroup>
+  </Target>
+
+  <!-- NativeAOT selects inputs before ResolvedFileToPublish exists. Intercept
+       the freshly resolved publish assets before that selection takes place. -->
+  <Target Name="HintsmithWeavePublishAssets" AfterTargets="_ComputeResolvedCopyLocalPublishAssets"
+          BeforeTargets="_ComputeAssembliesToCompileToNative"
+          DependsOnTargets="HintsmithValidateHost"
+          Condition="'$(HintsmithEnabled)' == 'true' And '$(DesignTimeBuild)' != 'true' And '$(IsCrossTargetingBuild)' != 'true'">
+    <ItemGroup>
+      <_HintsmithAssetRuntime Include="@(_ResolvedCopyLocalPublishAssets)" Condition="'%(Filename)%(Extension)' == 'Hintsmith.dll'" />
+    </ItemGroup>
+    <WeaveTask Symbols="$(HintsmithSymbols)" PdbPath="$(HintsmithPdbPath)" InputFiles="@(_ResolvedCopyLocalPublishAssets)" RuntimeAssembly="@(_HintsmithAssetRuntime)" IntermediateDirectory="$(_HintsmithIntermediate)">
+      <Output TaskParameter="OutputFiles" ItemName="_HintsmithPublishAssets" />
+      <Output TaskParameter="WrittenFiles" ItemName="FileWrites" />
+    </WeaveTask>
+    <ItemGroup>
+      <_ResolvedCopyLocalPublishAssets Remove="@(_ResolvedCopyLocalPublishAssets)" />
+      <_ResolvedCopyLocalPublishAssets Include="@(_HintsmithPublishAssets)" />
+    </ItemGroup>
+  </Target>
+
+  <!-- Final managed file list, including project references; before trimming,
+       R2R and bundling. NativeAOT has already consumed the earlier asset list. -->
+  <Target Name="HintsmithWeavePublish" AfterTargets="ComputeResolvedFilesToPublishList"
+          DependsOnTargets="HintsmithValidateHost"
+          Condition="'$(HintsmithEnabled)' == 'true' And '$(DesignTimeBuild)' != 'true' And '$(IsCrossTargetingBuild)' != 'true' And '$(PublishAot)' != 'true'">
+    <ItemGroup>
+      <_HintsmithPublishRuntime Include="@(ResolvedFileToPublish)" Condition="'%(Filename)%(Extension)' == 'Hintsmith.dll'" />
+    </ItemGroup>
+    <WeaveTask Symbols="$(HintsmithSymbols)" PdbPath="$(HintsmithPdbPath)" InputFiles="@(ResolvedFileToPublish)" RuntimeAssembly="@(_HintsmithPublishRuntime)" IntermediateDirectory="$(_HintsmithIntermediate)">
+      <Output TaskParameter="OutputFiles" ItemName="_HintsmithPublishFiles" />
+      <Output TaskParameter="WrittenFiles" ItemName="FileWrites" />
+    </WeaveTask>
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" />
+      <ResolvedFileToPublish Include="@(_HintsmithPublishFiles)" />
+    </ItemGroup>
+  </Target>
+  <Target Name="HintsmithRemoveStaleBuildSymbols" AfterTargets="CopyFilesToOutputDirectory"
+          Condition="'$(HintsmithEnabled)' == 'true' And '$(DesignTimeBuild)' != 'true'">
+    <ItemGroup>
+      <_HintsmithBuiltDll Include="@(_HintsmithBuildFiles)" Condition="'%(Filename)%(Extension)' == 'Avalonia.Skia.dll'" />
+      <_HintsmithBuiltPdb Include="@(_HintsmithBuildFiles)" Condition="'%(Filename)%(Extension)' == 'Avalonia.Skia.pdb'" />
+    </ItemGroup>
+    <Delete Files="$(TargetDir)Avalonia.Skia.pdb" Condition="'@(_HintsmithBuiltDll)' != '' And '@(_HintsmithBuiltPdb)' == ''" />
+  </Target>
+  <Target Name="HintsmithRemoveStalePublishSymbols" AfterTargets="CopyFilesToPublishDirectory"
+          Condition="'$(HintsmithEnabled)' == 'true' And '$(DesignTimeBuild)' != 'true' And '$(PublishAot)' != 'true'">
+    <ItemGroup>
+      <_HintsmithPublishedDll Include="@(_HintsmithPublishFiles)" Condition="'%(Filename)%(Extension)' == 'Avalonia.Skia.dll'" />
+      <_HintsmithPublishedPdb Include="@(_HintsmithPublishFiles)" Condition="'%(Filename)%(Extension)' == 'Avalonia.Skia.pdb'" />
+    </ItemGroup>
+    <Delete Files="$(PublishDir)Avalonia.Skia.pdb" Condition="'@(_HintsmithPublishedDll)' != '' And '@(_HintsmithPublishedPdb)' == ''" />
+  </Target>
+</Project>
+
+

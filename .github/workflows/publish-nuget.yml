@@ -1,0 +1,88 @@
+name: Publish NuGet Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      nuget_user:
+        description: NuGet.org username for Trusted Publishing
+        default: Summpot
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nuget-publication
+  cancel-in-progress: false
+
+env:
+  PACKAGE_OUTPUT_DIR: artifacts/nuget
+  NUGET_SOURCE: https://api.nuget.org/v3/index.json
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout selected ref
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Verify compatibility, symbols and publishing
+        shell: pwsh
+        run: ./eng/verify.ps1 -FullPublish
+
+      - name: Pack with the project version
+        shell: pwsh
+        run: dotnet pack src/Hintsmith/Hintsmith.csproj --configuration Release --output "$env:PACKAGE_OUTPUT_DIR"
+
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: NuGet.${{ github.sha }}
+          path: ${{ env.PACKAGE_OUTPUT_DIR }}/*.nupkg
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Download tested package artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: NuGet.${{ github.sha }}
+          path: ${{ env.PACKAGE_OUTPUT_DIR }}
+
+      - name: NuGet login
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ inputs.nuget_user }}
+
+      - name: Push package
+        shell: bash
+        env:
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+        run: |
+          set -euo pipefail
+          for package_file in "$PACKAGE_OUTPUT_DIR"/Hintsmith.[0-9]*.nupkg; do
+            dotnet nuget push "$package_file" \
+              --source "$NUGET_SOURCE" --api-key "$NUGET_API_KEY" \
+              --skip-duplicate
+          done

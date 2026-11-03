@@ -1,0 +1,9 @@
+<Project>
+  <PropertyGroup>
+    <HintsmithSymbols Condition="'$(HintsmithSymbols)' == ''">Preserve</HintsmithSymbols>
+    <HintsmithEnabled Condition="'$(HintsmithEnabled)' == ''">true</HintsmithEnabled>
+  </PropertyGroup>
+</Project>
+
+
+
